@@ -1,0 +1,213 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class ChessBoard extends JFrame {
+    private final int SIZE = 8;
+    private JButton[][] squares = new JButton[SIZE][SIZE];
+    private String[][] pieceColors = new String[SIZE][SIZE];
+    private int selectedRow = -1, selectedCol = -1;
+    private String currentPlayer = "White";
+
+    private JLabel statusBar, timerWhiteLabel, timerBlackLabel;
+    private int timeWhite = 300, timeBlack = 300;
+    private Timer gameTimer;
+
+    private JTextField whiteNameField, blackNameField;
+
+    private Color lightColor = new Color(240, 217, 181);
+    private Color darkColor = new Color(181, 136, 99);
+    private Color highlightColor = new Color(255, 255, 102);
+
+    private Font pieceFont = new Font("Segoe UI Symbol", Font.PLAIN, 36);
+
+    public ChessBoard() {
+        setTitle("Java Chess");
+        setSize(700, 800);
+        setLayout(new BorderLayout());
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+
+        statusBar = new JLabel("Turn: White", SwingConstants.CENTER);
+        statusBar.setFont(new Font("Arial", Font.BOLD, 16));
+        add(statusBar, BorderLayout.SOUTH);
+
+        JPanel boardPanel = new JPanel(new GridLayout(SIZE, SIZE));
+        add(boardPanel, BorderLayout.CENTER);
+
+        JPanel topPanel = new JPanel(new GridLayout(2, 2));
+        whiteNameField = new JTextField("White Player");
+        blackNameField = new JTextField("Black Player");
+        timerWhiteLabel = new JLabel("White: 05:00", SwingConstants.CENTER);
+        timerBlackLabel = new JLabel("Black: 05:00", SwingConstants.CENTER);
+        topPanel.add(whiteNameField);
+        topPanel.add(blackNameField);
+        topPanel.add(timerWhiteLabel);
+        topPanel.add(timerBlackLabel);
+        add(topPanel, BorderLayout.NORTH);
+
+        for (int row = 0; row < SIZE; row++) {
+            for (int col = 0; col < SIZE; col++) {
+                JButton button = new JButton();
+                button.setFont(pieceFont);
+                button.setFocusPainted(false);
+
+                if ((row + col) % 2 == 0) button.setBackground(lightColor);
+                else button.setBackground(darkColor);
+
+                if (row == 1) {
+                    button.setText("♟"); pieceColors[row][col] = "Black";
+                    button.setForeground(Color.BLACK);
+                } else if (row == 6) {
+                    button.setText("♙"); pieceColors[row][col] = "White";
+                    button.setForeground(Color.WHITE);
+                } else if (row == 0 || row == 7) {
+                    String piece = getMajorPiece(row, col);
+                    button.setText(piece);
+                    String color = (row == 0) ? "Black" : "White";
+                    pieceColors[row][col] = color;
+                    button.setForeground(color.equals("White") ? Color.WHITE : Color.BLACK);
+                }
+
+                final int r = row, c = col;
+                button.addMouseListener(new MouseAdapter() {
+                    public void mousePressed(MouseEvent e) {
+                        handleClick(r, c);
+                    }
+                });
+
+                squares[row][col] = button;
+                boardPanel.add(button);
+            }
+        }
+
+        JButton resetBtn = new JButton("Restart Game");
+        resetBtn.addActionListener(e -> resetGame());
+        add(resetBtn, BorderLayout.EAST);
+
+        startTimer();
+        setVisible(true);
+    }
+
+    private String getMajorPiece(int row, int col) {
+        String[] black = {"♜", "♞", "♝", "♛", "♚", "♝", "♞", "♜"};
+        String[] white = {"♖", "♘", "♗", "♕", "♔", "♗", "♘", "♖"};
+        return row == 0 ? black[col] : white[col];
+    }
+
+    private void handleClick(int row, int col) {
+        String clickedColor = pieceColors[row][col];
+        if (selectedRow == -1) {
+            if (clickedColor != null && clickedColor.equals(currentPlayer)) {
+                selectedRow = row; selectedCol = col;
+                squares[row][col].setBackground(highlightColor);
+            }
+        } else {
+            movePiece(selectedRow, selectedCol, row, col);
+            resetSelection();
+        }
+    }
+
+    private void movePiece(int fromRow, int fromCol, int toRow, int toCol) {
+        if (fromRow == toRow && fromCol == toCol) return;
+
+        String piece = squares[fromRow][fromCol].getText();
+        String targetColor = pieceColors[toRow][toCol];
+
+        boolean valid = false;
+        int rowDiff = toRow - fromRow;
+        int colDiff = toCol - fromCol;
+
+        switch (piece) {
+            case "♙": case "♟":
+                int dir = piece.equals("♙") ? -1 : 1;
+                boolean start = (piece.equals("♙") && fromRow == 6) || (piece.equals("♟") && fromRow == 1);
+                if (colDiff == 0 && targetColor == null && (rowDiff == dir || (start && rowDiff == 2 * dir))) valid = true;
+                else if (Math.abs(colDiff) == 1 && rowDiff == dir && targetColor != null && !targetColor.equals(currentPlayer)) valid = true;
+                break;
+            case "♜": case "♖":
+                if ((fromRow == toRow || fromCol == toCol) && pathClear(fromRow, fromCol, toRow, toCol)) valid = true;
+                break;
+            case "♝": case "♗":
+                if (Math.abs(rowDiff) == Math.abs(colDiff) && pathClear(fromRow, fromCol, toRow, toCol)) valid = true;
+                break;
+            case "♞": case "♘":
+                if ((Math.abs(rowDiff) == 2 && Math.abs(colDiff) == 1) || (Math.abs(rowDiff) == 1 && Math.abs(colDiff) == 2)) valid = true;
+                break;
+            case "♔": case "♚":
+                if (Math.abs(rowDiff) <= 1 && Math.abs(colDiff) <= 1) valid = true;
+                break;
+            case "♕": case "♛":
+                if (((fromRow == toRow || fromCol == toCol) || Math.abs(rowDiff) == Math.abs(colDiff)) && pathClear(fromRow, fromCol, toRow, toCol)) valid = true;
+                break;
+        }
+
+        if (valid && (targetColor == null || !targetColor.equals(currentPlayer))) {
+            squares[toRow][toCol].setText(squares[fromRow][fromCol].getText());
+            pieceColors[toRow][toCol] = currentPlayer;
+            squares[toRow][toCol].setForeground(currentPlayer.equals("White") ? Color.WHITE : Color.BLACK);
+            squares[fromRow][fromCol].setText("");
+            pieceColors[fromRow][fromCol] = null;
+            currentPlayer = currentPlayer.equals("White") ? "Black" : "White";
+            statusBar.setText("Turn: " + currentPlayer);
+        }
+    }
+
+    private boolean pathClear(int fromRow, int fromCol, int toRow, int toCol) {
+        int rowStep = Integer.compare(toRow, fromRow);
+        int colStep = Integer.compare(toCol, fromCol);
+
+        int r = fromRow + rowStep, c = fromCol + colStep;
+        while (r != toRow || c != toCol) {
+            if (!squares[r][c].getText().isEmpty()) return false;
+            r += rowStep;
+            c += colStep;
+        }
+        return true;
+    }
+
+    private void resetSelection() {
+        for (int r = 0; r < SIZE; r++) {
+            for (int c = 0; c < SIZE; c++) {
+                if ((r + c) % 2 == 0)
+                    squares[r][c].setBackground(lightColor);
+                else
+                    squares[r][c].setBackground(darkColor);
+            }
+        }
+        selectedRow = -1; selectedCol = -1;
+    }
+
+    private void resetGame() {
+        dispose();
+        new ChessBoard();
+    }
+
+    private void startTimer() {
+        gameTimer = new Timer();
+        gameTimer.scheduleAtFixedRate(new TimerTask() {
+            public void run() {
+                if (currentPlayer.equals("White")) timeWhite--;
+                else timeBlack--;
+
+                timerWhiteLabel.setText("White: " + formatTime(timeWhite));
+                timerBlackLabel.setText("Black: " + formatTime(timeBlack));
+
+                if (timeWhite == 0 || timeBlack == 0) {
+                    gameTimer.cancel();
+                    JOptionPane.showMessageDialog(null, (timeWhite == 0 ? "Black" : "White") + " wins on time!");
+                }
+            }
+        }, 0, 1000);
+    }
+
+    private String formatTime(int time) {
+        int min = time / 60, sec = time % 60;
+        return String.format("%02d:%02d", min, sec);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(ChessBoard::new);
+    }
+}
